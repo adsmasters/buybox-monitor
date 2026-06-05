@@ -10,12 +10,14 @@ export default async function DashboardPage() {
 
   const isAdmin = user.email === process.env.ADMIN_EMAIL;
 
-  // Kundendatensatz finden (über Auth-Client, RLS-sicher)
+  // Kundendatensatz finden (über Auth-Client, RLS-sicher) –
+  // Treffer wenn die Login-E-Mail in der emails-Liste des Kunden steht
   const { data: customer } = await auth
     .from("customers")
     .select("id, name")
-    .eq("email", user.email!)
-    .single();
+    .contains("emails", [user.email!])
+    .limit(1)
+    .maybeSingle();
 
   const customerId = customer?.id ?? null;
 

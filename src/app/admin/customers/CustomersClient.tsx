@@ -1,7 +1,7 @@
 "use client";
 import { useState, useTransition } from "react";
 
-interface Customer { id: string; name: string; email: string; created_at: string }
+interface Customer { id: string; name: string; email: string; emails?: string[]; created_at: string }
 interface AsinRow  { id: string; customer_id: string; asin: string; title: string | null }
 
 interface Props {
@@ -16,8 +16,40 @@ export default function CustomersClient({ customers: init, asins: initAsins }: P
   const [newName, setNewName]     = useState("");
   const [newEmail, setNewEmail]   = useState("");
   const [asinInput, setAsinInput] = useState("");
+  const [emailInput, setEmailInput] = useState("");
   const [msg, setMsg]             = useState("");
   const [isPending, startT]       = useTransition();
+
+  function syncSelected(updated: Customer) {
+    setCustomers(prev => prev.map(c => c.id === updated.id ? updated : c));
+    setSelected(updated);
+  }
+
+  async function addEmail() {
+    if (!selected || !emailInput.trim()) return;
+    const res = await fetch("/api/admin/customers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customer_id: selected.id, email: emailInput, action: "add" }),
+    });
+    const data = await res.json();
+    if (data.error) { setMsg("Fehler: " + data.error); return; }
+    syncSelected(data.customer);
+    setEmailInput("");
+    setMsg("E-Mail hinzugefügt.");
+  }
+
+  async function removeEmail(email: string) {
+    if (!selected) return;
+    const res = await fetch("/api/admin/customers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customer_id: selected.id, email, action: "remove" }),
+    });
+    const data = await res.json();
+    if (data.error) { setMsg("Fehler: " + data.error); return; }
+    syncSelected(data.customer);
+  }
 
   async function addCustomer() {
     if (!newName || !newEmail) return;
@@ -92,6 +124,41 @@ export default function CustomersClient({ customers: init, asins: initAsins }: P
           </div>
         </div>
 
+        {/* ── E-Mail-Zugänge + ASIN-Verwaltung ── */}
+        <div className="space-y-6">
+        {selected && (
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="px-5 py-4 border-b border-gray-100 font-semibold text-gray-900">
+              Zugänge (E-Mails) · {selected.name}
+            </div>
+            <div className="px-5 py-4 border-b border-gray-100 flex gap-2">
+              <input
+                value={emailInput}
+                onChange={e => setEmailInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") addEmail(); }}
+                placeholder="E-Mail des Nutzers (z.B. einkauf@klosterfrau.de)"
+                type="email"
+                className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400"
+              />
+              <button onClick={addEmail}
+                className="bg-blue-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap">
+                Hinzufügen
+              </button>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {(selected.emails || []).length === 0 && (
+                <p className="text-sm text-gray-400 px-5 py-3">Noch keine Zugänge. Jeder hier eingetragene Nutzer sieht genau diese ASINs.</p>
+              )}
+              {(selected.emails || []).map(em => (
+                <div key={em} className="flex items-center justify-between px-5 py-2.5">
+                  <span className="text-sm text-gray-900">{em}</span>
+                  <button onClick={() => removeEmail(em)} className="text-gray-300 hover:text-red-500 text-lg leading-none transition-colors">×</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── ASIN-Verwaltung ── */}
         <div className="bg-white rounded-xl border border-gray-200">
           <div className="px-5 py-4 border-b border-gray-100 font-semibold text-gray-900">
@@ -127,6 +194,7 @@ export default function CustomersClient({ customers: init, asins: initAsins }: P
               </div>
             ))}
           </div>
+        </div>
         </div>
       </div>
     </main>

@@ -11,7 +11,7 @@ export default async function CustomersPage() {
   const admin = createServiceClient();
   const { data: customers } = await admin
     .from("customers")
-    .select("id, name, email, created_at")
+    .select("id, name, email, emails, created_at")
     .order("name");
 
   const { data: asins } = await admin
