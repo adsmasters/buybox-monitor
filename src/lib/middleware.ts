@@ -25,6 +25,10 @@ export async function updateSession(request: NextRequest) {
   const isAuthPage = request.nextUrl.pathname.startsWith("/login");
   const isCallback = request.nextUrl.pathname.startsWith("/auth/callback");
   const isAdmin = request.nextUrl.pathname.startsWith("/admin");
+  const isApi = request.nextUrl.pathname.startsWith("/api");
+
+  // API-Routen regeln ihre Auth selbst (Cron, Service-Token) → kein Redirect
+  if (isApi) return supabaseResponse;
 
   if (!user && !isAuthPage && !isCallback) {
     const url = request.nextUrl.clone();
