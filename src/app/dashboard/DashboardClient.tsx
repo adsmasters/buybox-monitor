@@ -282,7 +282,7 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {["Produkt", "Aktueller Buy-Box-Seller", "Akt. Preis", "Ø 30-Tage", "Verkäufe/Monat", "Rank-Drops 90T", "Letzte 30 Tage"].map(h => (
+                  {["Produkt", "Aktueller Buy-Box-Seller", "Akt. Preis", "Ø 30-Tage", "Verkäufe/Monat", "Mindestumsatz/Monat", "Rank-Drops 90T", "Letzte 30 Tage"].map(h => (
                     <th key={h} className="text-left px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -314,6 +314,11 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
                       <td className="px-5 py-3 text-gray-900">
                         {r.monthly_sold != null
                           ? <span className="font-medium">{r.monthly_sold}+</span>
+                          : <span className="text-gray-400">n/a</span>}
+                      </td>
+                      <td className="px-5 py-3 font-semibold text-gray-900">
+                        {r.monthly_sold != null && r.lastPr != null
+                          ? <span title={`${r.monthly_sold}+ × ${fmtEur(r.lastPr)}`}>{fmtEur(r.monthly_sold * r.lastPr)}+</span>
                           : <span className="text-gray-400">n/a</span>}
                       </td>
                       <td className="px-5 py-3 text-gray-600">
