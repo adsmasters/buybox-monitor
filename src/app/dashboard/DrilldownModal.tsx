@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Line } from "react-chartjs-2";
 import {
   Chart as ChartJS, CategoryScale, LinearScale, PointElement,
@@ -34,6 +34,8 @@ interface Props {
 export default function DrilldownModal({ asin, product, bbHistory, priceHistory, sellerColor, onClose }: Props) {
   const overlayRef = useRef<HTMLDivElement>(null);
 
+  const [rangeDays, setRangeDays] = useState(365);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
     document.addEventListener("keydown", onKey);
@@ -41,10 +43,10 @@ export default function DrilldownModal({ asin, product, bbHistory, priceHistory,
   }, [onClose]);
 
   const nowKm  = Math.floor((Date.now() - KEEPA_EPOCH_MS) / 60_000);
-  const cut90  = nowKm - 365 * 1440;
+  const cut90  = nowKm - rangeDays * 1440;
   const span90 = nowKm - cut90;
 
-  // Buy-Box-Band
+  // Buy-Box-Band – nur Segmente die im gewählten Zeitfenster enden
   const seenSellers: Record<string, { name: string; color: string }> = {};
   const bandSegs = bbHistory.map((row, i) => {
     const from = Math.max(row.ts_km, cut90);
@@ -52,9 +54,9 @@ export default function DrilldownModal({ asin, product, bbHistory, priceHistory,
     const pct  = Math.max(0.2, (to - from) / span90 * 100);
     const col  = sellerColor(row.seller_id);
     const name = row.seller_name || row.seller_id;
-    seenSellers[row.seller_id] = { name, color: col };
-    return { pct, col, from, to, name };
-  });
+    return { pct, col, from, to, name, sellerId: row.seller_id, end: to };
+  }).filter(s => s.end > cut90);
+  bandSegs.forEach(s => { seenSellers[s.sellerId] = { name: s.name, color: s.col }; });
 
   // Seller, der zu einem Zeitpunkt (Keepa-Minute) die Buy Box hielt.
   // bbHistory ist aufsteigend sortiert → letzten Eintrag mit ts_km <= km nehmen.
@@ -67,13 +69,16 @@ export default function DrilldownModal({ asin, product, bbHistory, priceHistory,
     return cur;
   }
 
+  // Preispunkte aufs gewählte Zeitfenster begrenzen
+  const visiblePrice = priceHistory.filter(r => r.ts_km >= cut90);
+
   // Pro Preispunkt den aktiven Seller bestimmen (für Linienfarbe + Tooltip)
-  const pointSellers = priceHistory.map(r => sellerAt(r.ts_km));
+  const pointSellers = visiblePrice.map(r => sellerAt(r.ts_km));
 
   // Preis-Chart-Daten – Linie wird je Segment in der Seller-Farbe gezeichnet
   const chartData = {
     datasets: [{
-      data: priceHistory.map(r => ({ x: kmToDate(r.ts_km).getTime(), y: r.price_eur })),
+      data: visiblePrice.map(r => ({ x: kmToDate(r.ts_km).getTime(), y: r.price_eur })),
       borderColor: "#1a56db",
       backgroundColor: "rgba(26,86,219,0.06)",
       borderWidth: 2,
@@ -141,9 +146,21 @@ export default function DrilldownModal({ asin, product, bbHistory, priceHistory,
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-2xl leading-none font-light">×</button>
         </div>
 
+        {/* Zeitraum-Auswahl (gilt für Band + Preislinie) */}
+        <div className="flex gap-1 mb-4">
+          {([7, 30, 90, 180, 365] as const).map(d => (
+            <button key={d} onClick={() => setRangeDays(d)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${rangeDays === d ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}>
+              {d === 365 ? "1 Jahr" : `${d} Tage`}
+            </button>
+          ))}
+        </div>
+
         {/* Buy-Box-Band */}
         <div className="mb-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Buy-Box-Besitz · letztes Jahr</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">
+            Buy-Box-Besitz · {rangeDays === 365 ? "letztes Jahr" : `letzte ${rangeDays} Tage`}
+          </p>
           {bandSegs.length === 0 ? (
             <p className="text-sm text-gray-400">Keine Daten</p>
           ) : (
@@ -174,7 +191,7 @@ export default function DrilldownModal({ asin, product, bbHistory, priceHistory,
         </div>
 
         {/* Preislinie */}
-        {priceHistory.length > 0 ? (
+        {visiblePrice.length > 0 ? (
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-3">Buy-Box-Preis (€)</p>
             <div className="h-48">
