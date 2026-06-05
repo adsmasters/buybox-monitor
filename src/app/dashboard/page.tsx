@@ -1,4 +1,5 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { isAdminEmail } from "@/lib/admin";
 import { redirect } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import DashboardClient from "./DashboardClient";
@@ -8,7 +9,7 @@ export default async function DashboardPage() {
   const { data: { user } } = await auth.auth.getUser();
   if (!user) redirect("/login");
 
-  const isAdmin = user.email === process.env.ADMIN_EMAIL;
+  const isAdmin = isAdminEmail(user.email);
 
   // Kundendatensatz finden (über Auth-Client, RLS-sicher) –
   // Treffer wenn die Login-E-Mail in der emails-Liste des Kunden steht

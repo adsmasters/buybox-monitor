@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isAdminEmail } from "@/lib/admin";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -31,8 +32,8 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Admin-Schutz: nur ADMIN_EMAIL
-  if (isAdmin && user?.email !== process.env.ADMIN_EMAIL) {
+  // Admin-Schutz: nur Admin-/Team-E-Mails
+  if (isAdmin && !isAdminEmail(user?.email)) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
