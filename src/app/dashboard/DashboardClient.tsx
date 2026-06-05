@@ -70,6 +70,7 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
   const [distDaysLeft, setDistDaysLeft] = useState(90);
   const [distDaysRight, setDistDaysRight] = useState(30);
   const [dropDays, setDropDays] = useState(30);
+  const [perfMetric, setPerfMetric] = useState<"revenue" | "units">("revenue");
 
   const sellerMap = useMemo(() => {
     const m: Record<string, Seller> = {};
@@ -189,6 +190,31 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
     }
     return Object.entries(m).sort((a, b) => b[1].drops - a[1].drops);
   }, [changes, dropDays]);
+
+  // Produkt-Performance: Anteil je Produkt am geschätzten Gesamt-Umsatz/-Absatz
+  const productPerf = useMemo(() => {
+    const rows = Object.values(productMap).map(p => {
+      const prs = priceByAsin[p.asin] || [];
+      const lastPr = prs.length ? prs[prs.length - 1].price_eur : null;
+      const units = p.monthly_sold ?? null;             // Mindest-Einheiten/Monat
+      const revenue = units != null && lastPr != null ? units * lastPr : null;
+      return { asin: p.asin, title: p.title || p.asin, units, revenue, lastPr };
+    });
+    const totalRev = rows.reduce((s, r) => s + (r.revenue || 0), 0);
+    const totalUnits = rows.reduce((s, r) => s + (r.units || 0), 0);
+    const withVal = rows.map(r => ({
+      ...r,
+      value: perfMetric === "revenue" ? r.revenue : r.units,
+      share: perfMetric === "revenue"
+        ? (totalRev ? (r.revenue || 0) / totalRev * 100 : 0)
+        : (totalUnits ? (r.units || 0) / totalUnits * 100 : 0),
+    }));
+    return {
+      rows: withVal.filter(r => r.value != null && r.value > 0).sort((a, b) => (b.value || 0) - (a.value || 0)),
+      totalRev, totalUnits,
+      missing: rows.filter(r => r.value == null).length,
+    };
+  }, [productMap, priceByAsin, perfMetric]);
 
   // Tabellen-Daten
   const tableRows = useMemo(() => {
@@ -468,6 +494,73 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
               </tbody>
             </table>
           </div>
+        </div>
+      </section>
+
+      {/* ── Produkt-Performance ── */}
+      <section>
+        <div className="flex items-center gap-3 mb-1">
+          <h2 className="text-lg font-bold text-gray-900">Produkt-Performance</h2>
+          <div className="flex gap-1">
+            <button onClick={() => setPerfMetric("revenue")}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${perfMetric === "revenue" ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}>
+              Umsatz
+            </button>
+            <button onClick={() => setPerfMetric("units")}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${perfMetric === "units" ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}>
+              Absatz
+            </button>
+          </div>
+        </div>
+        <p className="text-sm text-gray-500 mb-3">
+          Anteil je Produkt am geschätzten Monats-{perfMetric === "revenue" ? "umsatz" : "-absatz"} (Mindestwerte aus Verkaufsstufen × Preis)
+          {productPerf.missing > 0 && <> · {productPerf.missing} ohne Verkaufsdaten ausgeblendet</>}
+        </p>
+        <div className="bg-white rounded-xl border border-gray-200">
+          {productPerf.rows.length === 0 ? (
+            <p className="text-center text-sm text-gray-400 py-8">Keine Verkaufsdaten verfügbar.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold">#</th>
+                  <th className="text-left px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold">Produkt</th>
+                  <th className="text-right px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold whitespace-nowrap">{perfMetric === "revenue" ? "Umsatz/Monat" : "Absatz/Monat"}</th>
+                  <th className="text-left px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold w-[34%]">Anteil</th>
+                  <th className="px-5 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {productPerf.rows.map((r, i) => (
+                  <tr key={r.asin} className="hover:bg-gray-50">
+                    <td className="px-5 py-3 text-gray-400 font-semibold">{i + 1}</td>
+                    <td className="px-5 py-3 max-w-xs">
+                      <div className="font-medium text-gray-900 truncate" title={r.title}>{r.title}</div>
+                      <div className="text-xs text-gray-400">{r.asin}</div>
+                    </td>
+                    <td className="px-5 py-3 text-right font-semibold text-gray-900 whitespace-nowrap">
+                      {perfMetric === "revenue" ? `${fmtEur0(r.revenue || 0)}+` : `${r.units}+ Stk.`}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                          <div className="h-full rounded-full bg-blue-600" style={{ width: `${r.share}%` }} />
+                        </div>
+                        <span className="text-xs font-semibold text-gray-700 w-12 text-right">{r.share.toFixed(1)} %</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-right whitespace-nowrap">
+                      <a href={`https://www.amazon.de/dp/${r.asin}`} target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="text-xs font-medium text-blue-600 hover:text-blue-800">
+                        Amazon ↗
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
 
