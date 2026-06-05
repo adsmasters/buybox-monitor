@@ -1,6 +1,8 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { queryProducts, resolveSellers, priceFromRaw, kmToDate, AMAZON_SELLERS } from "@/lib/keepa";
+import { queryProducts, resolveSellers, priceFromRaw, kmToDate, AMAZON_SELLERS, PARTNER_KEYWORDS } from "@/lib/keepa";
+
+export const maxDuration = 60; // Vercel: bis 60s pro Pull-Request
 
 async function checkAdmin() {
   const supabase = await createClient();
@@ -10,7 +12,23 @@ async function checkAdmin() {
 }
 
 const BATCH = 10;
-const BB_PRICE_CSV_IDX = 18; // BUY_BOX_SHIPPING
+const BB_PRICE_CSV_IDX = 18; // BUY_BOX_SHIPPING (Triplet: Zeit, Preis, Versand)
+
+// Buy-Box-Preis = Preis + Versand; -1 = nicht verfügbar → null
+function combineBuyBoxPrice(price: number, shipping: number): number | null {
+  const p = priceFromRaw(price);
+  if (p === null) return null;
+  const s = shipping > 0 ? shipping / 100 : 0;
+  return Math.round((p + s) * 100) / 100;
+}
+
+// Letzten Wert je ts_km behalten – verhindert Postgres-Fehler
+// "ON CONFLICT cannot affect row a second time"
+function dedupeByTsKm<T extends { ts_km: number }>(rows: T[]): T[] {
+  const map = new Map<number, T>();
+  for (const r of rows) map.set(r.ts_km, r);
+  return [...map.values()];
+}
 
 export async function POST(req: Request) {
   if (!await checkAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,7 +79,11 @@ export async function POST(req: Request) {
         const resolved = await resolveSellers([...unknownIds]);
         for (const [id, name] of Object.entries(resolved)) {
           sellerCache[id] = name;
-          await admin.from("sellers").upsert({ seller_id: id, seller_name: name }, { onConflict: "seller_id" });
+          const isPartner = PARTNER_KEYWORDS.some((kw) => name.toLowerCase().includes(kw));
+          const { error } = await admin
+            .from("sellers")
+            .upsert({ seller_id: id, seller_name: name, is_partner: isPartner }, { onConflict: "seller_id" });
+          if (error) errors.push(`seller ${id}: ${error.message}`);
         }
       }
 
@@ -88,23 +110,30 @@ export async function POST(req: Request) {
               seller_name: sellerCache[sid] || (sid === "-1" ? "Kein Seller" : sid === "-2" ? "Unbekannter Seller" : sid),
             });
           }
-          if (bbRows.length) {
-            await admin.from("bb_history").upsert(bbRows, { onConflict: "asin,ts_km" });
+          const deduped = dedupeByTsKm(bbRows);
+          if (deduped.length) {
+            const { error } = await admin.from("bb_history").upsert(deduped, { onConflict: "asin,ts_km" });
+            if (error) errors.push(`bb ${asin}: ${error.message}`);
           }
         }
 
-        // Preis-Historie (csv[18] = BUY_BOX_SHIPPING)
+        // Preis-Historie: csv[18] = BUY_BOX_SHIPPING im Triplet-Format
+        // [keepaMinute, preis, versand, keepaMinute, preis, versand, …]
         const csv = p.csv || [];
         const prSeries = csv[BB_PRICE_CSV_IDX];
-        if (prSeries && prSeries.length >= 2) {
+        if (prSeries && prSeries.length >= 3) {
           const prRows: any[] = [];
-          for (let j = 0; j < prSeries.length - 1; j += 2) {
-            const km  = prSeries[j];
-            const raw = prSeries[j + 1];
-            prRows.push({ asin, ts: kmToDate(km).toISOString(), ts_km: km, price_eur: priceFromRaw(raw) });
+          for (let j = 0; j < prSeries.length - 2; j += 3) {
+            const km       = prSeries[j];
+            const price    = prSeries[j + 1];
+            const shipping = prSeries[j + 2];
+            const eur = combineBuyBoxPrice(price, shipping);
+            prRows.push({ asin, ts: kmToDate(km).toISOString(), ts_km: km, price_eur: eur });
           }
-          if (prRows.length) {
-            await admin.from("price_history").upsert(prRows, { onConflict: "asin,ts_km" });
+          const deduped = dedupeByTsKm(prRows);
+          if (deduped.length) {
+            const { error } = await admin.from("price_history").upsert(deduped, { onConflict: "asin,ts_km" });
+            if (error) errors.push(`price ${asin}: ${error.message}`);
           }
         }
 

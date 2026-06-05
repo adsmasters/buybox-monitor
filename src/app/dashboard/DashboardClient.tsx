@@ -40,7 +40,7 @@ function fmtTime(ts: string): string {
 
 // ── Hauptkomponente ─────────────────────────────────────────────────────────
 export default function DashboardClient({ bbHistory, priceHistory, sellers, products }: Props) {
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useState(90);
   const [filterExternal, setFilterExternal] = useState(false);
   const [feedSearch, setFeedSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");

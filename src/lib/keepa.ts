@@ -59,6 +59,13 @@ export interface KeepaProduct {
   csv?: (number[] | null)[];
 }
 
+// Partner-/eigene Apotheken – Seller-Namen die als „Partner" (grün) gelten.
+// Keepa liefert teils abweichende Schreibweisen (z. B. „Pennguin-DE"),
+// daher Teilstring-Abgleich in Kleinschreibung.
+export const PARTNER_KEYWORDS = [
+  "penguin", "pennguin", "sunnycare", "sunny care", "stv", "klosterfrau",
+];
+
 // Bekannte Amazon-eigene Seller-IDs
 export const AMAZON_SELLERS: Record<string, string> = {
   A3JWKAKR8XB7XF: "Amazon.de",
