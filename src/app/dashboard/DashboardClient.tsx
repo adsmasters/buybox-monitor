@@ -212,7 +212,7 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
     return {
       rows: withVal.filter(r => r.value != null && r.value > 0).sort((a, b) => (b.value || 0) - (a.value || 0)),
       totalRev, totalUnits,
-      missing: rows.filter(r => r.value == null).length,
+      missing: withVal.filter(r => r.value == null || r.value === 0).length,
     };
   }, [productMap, priceByAsin, perfMetric]);
 
