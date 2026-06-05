@@ -58,19 +58,30 @@ export default async function DashboardPage() {
   // Daten aus Supabase laden
   const cutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [bbRes, prRes, sellersRes, productsRes] = await Promise.all([
-    supabase
-      .from("bb_history")
-      .select("asin, ts, ts_km, seller_id, seller_name")
-      .in("asin", asins)
-      .gte("ts", cutoff)
-      .order("ts_km", { ascending: true }),
-    supabase
-      .from("price_history")
-      .select("asin, ts, ts_km, price_eur")
-      .in("asin", asins)
-      .gte("ts", cutoff)
-      .order("ts_km", { ascending: true }),
+  // Supabase liefert max. 1000 Zeilen pro Request → seitenweise alles laden.
+  async function fetchAll(table: string, cols: string) {
+    const PAGE = 1000;
+    let from = 0;
+    const all: any[] = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from(table)
+        .select(cols)
+        .in("asin", asins)
+        .gte("ts", cutoff)
+        .order("ts_km", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error || !data || data.length === 0) break;
+      all.push(...data);
+      if (data.length < PAGE) break;
+      from += PAGE;
+    }
+    return all;
+  }
+
+  const [bbHistory, priceHistory, sellersRes, productsRes] = await Promise.all([
+    fetchAll("bb_history", "asin, ts, ts_km, seller_id, seller_name"),
+    fetchAll("price_history", "asin, ts, ts_km, price_eur"),
     supabase.from("sellers").select("seller_id, seller_name, is_partner"),
     supabase.from("asins").select("asin, title, brand").in("asin", asins),
   ]);
@@ -79,8 +90,8 @@ export default async function DashboardPage() {
     <>
       <NavBar email={user.email!} isAdmin={isAdmin} />
       <DashboardClient
-        bbHistory={bbRes.data || []}
-        priceHistory={prRes.data || []}
+        bbHistory={bbHistory}
+        priceHistory={priceHistory}
         sellers={sellersRes.data || []}
         products={productsRes.data || []}
       />
