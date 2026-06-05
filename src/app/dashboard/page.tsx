@@ -53,7 +53,7 @@ export default async function DashboardPage() {
   }
 
   // Daten aus Supabase laden
-  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
 
   const [bbRes, prRes, sellersRes, productsRes] = await Promise.all([
     supabase

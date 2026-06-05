@@ -182,7 +182,7 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: "ASINs überwacht", value: kpi.total, sub: "" },
-          { label: "Buy-Box-Wechsel (90 Tage)", value: kpi.changes, sub: "" },
+          { label: "Buy-Box-Wechsel (1 Jahr)", value: kpi.changes, sub: "" },
           { label: "Aktuell Partner-BB", value: kpi.partner, sub: kpi.total ? `${Math.round(kpi.partner / kpi.total * 100)} %` : "", color: "text-emerald-600" },
           { label: "Aktuell Fremd-BB", value: kpi.external, sub: kpi.total ? `${Math.round(kpi.external / kpi.total * 100)} %` : "", color: "text-red-600" },
         ].map(k => (
@@ -202,10 +202,10 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
           {/* Controls */}
           <div className="flex flex-wrap gap-3 items-center px-5 py-3 border-b border-gray-100">
             <div className="flex gap-1">
-              {([7, 30, 90] as const).map(d => (
+              {([7, 30, 90, 180, 365] as const).map(d => (
                 <button key={d} onClick={() => setDays(d)}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${days === d ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}>
-                  {d} Tage
+                  {d === 365 ? "1 Jahr" : `${d} Tage`}
                 </button>
               ))}
             </div>

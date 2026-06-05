@@ -41,7 +41,7 @@ export default function DrilldownModal({ asin, product, bbHistory, priceHistory,
   }, [onClose]);
 
   const nowKm  = Math.floor((Date.now() - KEEPA_EPOCH_MS) / 60_000);
-  const cut90  = nowKm - 90 * 1440;
+  const cut90  = nowKm - 365 * 1440;
   const span90 = nowKm - cut90;
 
   // Buy-Box-Band
@@ -117,7 +117,7 @@ export default function DrilldownModal({ asin, product, bbHistory, priceHistory,
 
         {/* Buy-Box-Band */}
         <div className="mb-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Buy-Box-Besitz · letzte 90 Tage</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">Buy-Box-Besitz · letztes Jahr</p>
           {bandSegs.length === 0 ? (
             <p className="text-sm text-gray-400">Keine Daten</p>
           ) : (

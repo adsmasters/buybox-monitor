@@ -20,12 +20,14 @@ export async function queryProducts(asins: string[]): Promise<KeepaProduct[]> {
   url.searchParams.set("asin", asins.join(","));
   url.searchParams.set("buybox", "1");
   url.searchParams.set("history", "1");
-  url.searchParams.set("offers", "0");
 
   const res = await fetch(url.toString(), { next: { revalidate: 0 } });
-  if (!res.ok) throw new Error(`Keepa HTTP ${res.status}`);
   const data = await res.json();
-  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  if (data.error) {
+    const e = data.error;
+    throw new Error(`Keepa: ${e.message || e.type || JSON.stringify(e)}`);
+  }
+  if (!res.ok) throw new Error(`Keepa HTTP ${res.status}`);
   return data.products || [];
 }
 
