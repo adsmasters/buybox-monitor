@@ -199,6 +199,15 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
         ))}
       </div>
 
+      {/* ── Verteilung (Überblick, ganz oben: grob → detailliert) ── */}
+      <section>
+        <h2 className="text-lg font-bold text-gray-900 mb-1">Buy-Box-Verteilung gesamt</h2>
+        <p className="text-sm text-gray-500 mb-3">Anteil je Seller über alle ASINs, letzte 90 Tage</p>
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <DistChart bbHistory={bbHistory} sellers={sellers} sellerColor={sellerColor} />
+        </div>
+      </section>
+
       {/* ── Change-Feed ── */}
       <section>
         <h2 className="text-lg font-bold text-gray-900 mb-1">Buy-Box-Wechsel</h2>
@@ -344,15 +353,6 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
               </tbody>
             </table>
           </div>
-        </div>
-      </section>
-
-      {/* ── Verteilung ── */}
-      <section>
-        <h2 className="text-lg font-bold text-gray-900 mb-1">Buy-Box-Verteilung gesamt</h2>
-        <p className="text-sm text-gray-500 mb-3">Anteil je Seller über alle ASINs, letzte 90 Tage</p>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <DistChart bbHistory={bbHistory} sellers={sellers} sellerColor={sellerColor} />
         </div>
       </section>
 
