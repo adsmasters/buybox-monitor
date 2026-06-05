@@ -56,22 +56,44 @@ export default function DrilldownModal({ asin, product, bbHistory, priceHistory,
     return { pct, col, from, to, name };
   });
 
-  // Preis-Chart-Daten
+  // Seller, der zu einem Zeitpunkt (Keepa-Minute) die Buy Box hielt.
+  // bbHistory ist aufsteigend sortiert → letzten Eintrag mit ts_km <= km nehmen.
+  function sellerAt(km: number): { id: string; name: string } {
+    let cur = { id: "-1", name: "Kein Seller" };
+    for (const row of bbHistory) {
+      if (row.ts_km <= km) cur = { id: row.seller_id, name: row.seller_name || row.seller_id };
+      else break;
+    }
+    return cur;
+  }
+
+  // Pro Preispunkt den aktiven Seller bestimmen (für Linienfarbe + Tooltip)
+  const pointSellers = priceHistory.map(r => sellerAt(r.ts_km));
+
+  // Preis-Chart-Daten – Linie wird je Segment in der Seller-Farbe gezeichnet
   const chartData = {
     datasets: [{
       data: priceHistory.map(r => ({ x: kmToDate(r.ts_km).getTime(), y: r.price_eur })),
       borderColor: "#1a56db",
-      backgroundColor: "rgba(26,86,219,0.07)",
+      backgroundColor: "rgba(26,86,219,0.06)",
       borderWidth: 2,
       pointRadius: 0,
+      pointHoverRadius: 4,
       fill: true,
       tension: 0,
+      segment: {
+        // Segment in der Farbe des Sellers färben, der am Endpunkt die BB hielt
+        borderColor: (ctx: any) => sellerColor(pointSellers[ctx.p1DataIndex]?.id),
+      },
     }],
   };
 
   const chartOpts: any = {
     responsive: true,
     maintainAspectRatio: false,
+    // Tooltip auch zwischen den (unsichtbaren) Punkten anzeigen
+    interaction: { mode: "index", intersect: false },
+    hover: { mode: "index", intersect: false },
     scales: {
       x: {
         type: "time",
@@ -93,7 +115,11 @@ export default function DrilldownModal({ asin, product, bbHistory, priceHistory,
       tooltip: {
         callbacks: {
           title: (ctx: any) => fmtDT(new Date(ctx[0].parsed.x)),
-          label: (ctx: any) => " " + fmtEur(ctx.parsed.y),
+          label: (ctx: any) => "  " + fmtEur(ctx.parsed.y),
+          afterLabel: (ctx: any) => {
+            const s = pointSellers[ctx.dataIndex];
+            return s ? "Buy Box: " + s.name : "";
+          },
         },
       },
     },
