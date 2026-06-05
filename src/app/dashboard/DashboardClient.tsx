@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import DrilldownModal from "./DrilldownModal";
 import DistChart from "./DistChart";
 
@@ -19,6 +20,9 @@ interface Props {
   priceHistory: PrRow[];
   sellers: Seller[];
   products: Product[];
+  customers?: { id: string; name: string }[];
+  selectedCustomerId?: string | null;
+  isAdmin?: boolean;
 }
 
 // ── Farben ─────────────────────────────────────────────────────────────────
@@ -56,7 +60,8 @@ function nextTier(v: number): number {
 }
 
 // ── Hauptkomponente ─────────────────────────────────────────────────────────
-export default function DashboardClient({ bbHistory, priceHistory, sellers, products }: Props) {
+export default function DashboardClient({ bbHistory, priceHistory, sellers, products, customers = [], selectedCustomerId = null, isAdmin = false }: Props) {
+  const router = useRouter();
   const [days, setDays] = useState(90);
   const [filterExternal, setFilterExternal] = useState(false);
   const [feedSearch, setFeedSearch] = useState("");
@@ -224,6 +229,23 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
 
   return (
     <main className="max-w-7xl mx-auto px-6 py-7 space-y-8">
+
+      {/* ── Kunden-Auswähler (nur Team/Admin) ── */}
+      {isAdmin && customers.length > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">Kunde:</span>
+          <select
+            value={selectedCustomerId || "all"}
+            onChange={e => router.push(`/dashboard?customer=${e.target.value}`)}
+            className="text-sm font-semibold border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 cursor-pointer bg-white"
+          >
+            <option value="all">Alle Kunden ({customers.length})</option>
+            {customers.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* ── KPI-Leiste ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -4,41 +4,51 @@ import { redirect } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import DashboardClient from "./DashboardClient";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string }>;
+}) {
+  const sp = await searchParams;
   const auth = await createClient();
   const { data: { user } } = await auth.auth.getUser();
   if (!user) redirect("/login");
 
   const isAdmin = isAdminEmail(user.email);
 
-  // Kundendatensatz finden (über Auth-Client, RLS-sicher) –
-  // Treffer wenn die Login-E-Mail in der emails-Liste des Kunden steht
-  const { data: customer } = await auth
+  // Eigener Kundendatensatz (für Nicht-Admins, RLS-sicher)
+  const { data: ownCustomer } = await auth
     .from("customers")
     .select("id, name")
     .contains("emails", [user.email!])
     .limit(1)
     .maybeSingle();
 
-  const customerId = customer?.id ?? null;
-
-  // Admin liest per Service-Client (umgeht RLS, sieht alle Daten);
-  // Kunde liest per Auth-Client (RLS begrenzt auf eigene Daten).
+  // Admin liest per Service-Client (sieht alle), Kunde per Auth-Client (RLS).
   const supabase = isAdmin ? createServiceClient() : auth;
 
-  // ASINs für diesen Kunden
-  let asins: string[] = [];
-  if (customerId) {
-    const { data } = await supabase
-      .from("asins")
-      .select("asin")
-      .eq("customer_id", customerId);
-    asins = (data || []).map((r: any) => r.asin);
-  } else if (isAdmin) {
-    // Admin sieht alle ASINs
-    const { data } = await supabase.from("asins").select("asin");
-    asins = (data || []).map((r: any) => r.asin);
+  // Kundenliste für den Auswähler (nur Admin/Team)
+  let customers: { id: string; name: string }[] = [];
+  if (isAdmin) {
+    const { data } = await supabase.from("customers").select("id, name").order("name");
+    customers = data || [];
   }
+
+  // Welcher Kunde wird angezeigt?
+  // - Admin: ?customer=<id> oder "all" (alle); Default = alle
+  // - Kunde: immer der eigene
+  const selectedCustomerId = isAdmin ? (sp.customer || "all") : (ownCustomer?.id ?? null);
+
+  // ASINs für die Auswahl bestimmen
+  let asinQuery = supabase.from("asins").select("asin");
+  if (selectedCustomerId && selectedCustomerId !== "all") {
+    asinQuery = asinQuery.eq("customer_id", selectedCustomerId);
+  } else if (!isAdmin) {
+    // Nicht-Admin ohne Kunde → nichts
+    asinQuery = asinQuery.eq("customer_id", "00000000-0000-0000-0000-000000000000");
+  }
+  const { data: asinRows } = await asinQuery;
+  const asins: string[] = (asinRows || []).map((r: any) => r.asin);
 
   if (asins.length === 0) {
     return (
@@ -97,6 +107,9 @@ export default async function DashboardPage() {
         priceHistory={priceHistory}
         sellers={sellersRes.data || []}
         products={productsRes.data || []}
+        customers={customers}
+        selectedCustomerId={selectedCustomerId}
+        isAdmin={isAdmin}
       />
     </>
   );
