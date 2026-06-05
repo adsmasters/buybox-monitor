@@ -66,25 +66,31 @@ export async function POST(req: Request) {
     try {
       const products = await queryProducts(batch);
 
-      // Seller-IDs aus diesem Batch sammeln und auflösen
+      // Alle Seller-IDs dieses Batches sammeln; unbekannte neu auflösen
+      const seenIds = new Set<string>();
       const unknownIds = new Set<string>();
       for (const p of products) {
         const bb = p.buyBoxSellerIdHistory || [];
         for (let j = 1; j < bb.length; j += 2) {
           const sid = String(bb[j]);
-          if (!sellerCache[sid] && sid !== "-1" && sid !== "-2") unknownIds.add(sid);
+          if (sid === "-1" || sid === "-2") continue;
+          seenIds.add(sid);
+          if (!sellerCache[sid]) unknownIds.add(sid);
         }
       }
       if (unknownIds.size > 0) {
         const resolved = await resolveSellers([...unknownIds]);
-        for (const [id, name] of Object.entries(resolved)) {
-          sellerCache[id] = name;
-          const isPartner = PARTNER_KEYWORDS.some((kw) => name.toLowerCase().includes(kw));
-          const { error } = await admin
-            .from("sellers")
-            .upsert({ seller_id: id, seller_name: name, is_partner: isPartner }, { onConflict: "seller_id" });
-          if (error) errors.push(`seller ${id}: ${error.message}`);
-        }
+        for (const [id, name] of Object.entries(resolved)) sellerCache[id] = name;
+      }
+      // is_partner für ALLE gesehenen Seller (re-)setzen – auch bereits bekannte,
+      // damit neue Partner-Keywords rückwirkend greifen.
+      for (const id of seenIds) {
+        const name = sellerCache[id] || id;
+        const isPartner = PARTNER_KEYWORDS.some((kw) => name.toLowerCase().includes(kw));
+        const { error } = await admin
+          .from("sellers")
+          .upsert({ seller_id: id, seller_name: name, is_partner: isPartner }, { onConflict: "seller_id" });
+        if (error) errors.push(`seller ${id}: ${error.message}`);
       }
 
       for (const p of products) {
