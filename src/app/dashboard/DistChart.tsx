@@ -78,13 +78,16 @@ export default function DistChart({ bbHistory, sellers, sellerColor, days, setDa
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <div className="flex gap-1 mb-4">
-        {([30, 90, 365] as const).map(d => (
-          <button key={d} onClick={() => setDays(d)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${days === d ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}>
-            {d === 365 ? "1 Jahr" : `${d} Tage`}
-          </button>
-        ))}
+      <div className="mb-4">
+        <select
+          value={days}
+          onChange={e => setDays(Number(e.target.value))}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 font-medium text-gray-700 focus:outline-none focus:border-blue-400 cursor-pointer"
+        >
+          {[7, 14, 30, 60, 90, 120, 180, 365].map(d => (
+            <option key={d} value={d}>{d === 365 ? "Letztes Jahr" : `Letzte ${d} Tage`}</option>
+          ))}
+        </select>
       </div>
 
       {shares.length === 0 ? (
