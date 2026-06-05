@@ -254,11 +254,11 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
       <section>
         <div className="flex items-center gap-3 mb-1">
           <h2 className="text-lg font-bold text-gray-900">Wer drückt die Preise?</h2>
-          <div className="flex gap-1">
-            {([7, 30, 90] as const).map(d => (
+          <div className="flex flex-wrap gap-1">
+            {([7, 14, 30, 60, 90, 120, 180, 365] as const).map(d => (
               <button key={d} onClick={() => setDropDays(d)}
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${dropDays === d ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}>
-                {d} Tage
+                {d === 365 ? "1 Jahr" : `${d} Tage`}
               </button>
             ))}
           </div>
