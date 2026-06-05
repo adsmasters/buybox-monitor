@@ -1,24 +1,27 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import NavBar from "@/components/NavBar";
 import DashboardClient from "./DashboardClient";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const auth = await createClient();
+  const { data: { user } } = await auth.auth.getUser();
   if (!user) redirect("/login");
 
   const isAdmin = user.email === process.env.ADMIN_EMAIL;
 
-  // Kundendatensatz finden
-  const { data: customer } = await supabase
+  // Kundendatensatz finden (über Auth-Client, RLS-sicher)
+  const { data: customer } = await auth
     .from("customers")
     .select("id, name")
     .eq("email", user.email!)
     .single();
 
-  // Wenn Admin und noch kein Customer-Eintrag: Admin-Ansicht
   const customerId = customer?.id ?? null;
+
+  // Admin liest per Service-Client (umgeht RLS, sieht alle Daten);
+  // Kunde liest per Auth-Client (RLS begrenzt auf eigene Daten).
+  const supabase = isAdmin ? createServiceClient() : auth;
 
   // ASINs für diesen Kunden
   let asins: string[] = [];
