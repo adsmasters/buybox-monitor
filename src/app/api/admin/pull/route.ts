@@ -1,6 +1,6 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
-import { queryProducts, resolveSellers, priceFromRaw, kmToDate, AMAZON_SELLERS, PARTNER_KEYWORDS } from "@/lib/keepa";
+import { queryProducts, resolveSellers, priceFromRaw, kmToDate, AMAZON_SELLERS, PARTNER_KEYWORDS, latestMonthlySold } from "@/lib/keepa";
 
 export const maxDuration = 60; // Vercel: bis 60s pro Pull-Request
 
@@ -97,9 +97,14 @@ export async function POST(req: Request) {
         const asin = p.asin;
         if (!asin) continue;
 
-        // Produkt-Meta aktualisieren
-        await admin.from("asins").update({ title: p.title || null, brand: p.brand || null })
-          .eq("asin", asin);
+        // Produkt-Meta + Verkaufskennzahlen aktualisieren
+        await admin.from("asins").update({
+          title: p.title || null,
+          brand: p.brand || null,
+          monthly_sold: latestMonthlySold(p),
+          sales_rank_drops_30: p.stats?.salesRankDrops30 ?? null,
+          sales_rank_drops_90: p.stats?.salesRankDrops90 ?? null,
+        }).eq("asin", asin);
 
         // Buy-Box-Historie
         const bbHist = p.buyBoxSellerIdHistory || [];

@@ -83,7 +83,7 @@ export default async function DashboardPage() {
     fetchAll("bb_history", "asin, ts, ts_km, seller_id, seller_name"),
     fetchAll("price_history", "asin, ts, ts_km, price_eur"),
     supabase.from("sellers").select("seller_id, seller_name, is_partner"),
-    supabase.from("asins").select("asin, title, brand").in("asin", asins),
+    supabase.from("asins").select("asin, title, brand, monthly_sold, sales_rank_drops_30, sales_rank_drops_90").in("asin", asins),
   ]);
 
   return (

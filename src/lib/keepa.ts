@@ -20,6 +20,7 @@ export async function queryProducts(asins: string[]): Promise<KeepaProduct[]> {
   url.searchParams.set("asin", asins.join(","));
   url.searchParams.set("buybox", "1");
   url.searchParams.set("history", "1");
+  url.searchParams.set("stats", "90"); // liefert stats.salesRankDrops30/90 + monthlySold
 
   const res = await fetch(url.toString(), { next: { revalidate: 0 } });
   const data = await res.json();
@@ -57,6 +58,23 @@ export interface KeepaProduct {
   brand?: string;
   buyBoxSellerIdHistory?: number[];
   csv?: (number[] | null)[];
+  monthlySold?: number;                 // aktueller „X+ verkauft"-Badge-Wert (-1 = keiner)
+  monthlySoldHistory?: number[];        // [keepaMinute, menge, …]
+  stats?: {
+    salesRankDrops30?: number;
+    salesRankDrops90?: number;
+    current?: number[];                 // current[3] = aktueller Sales Rank
+  };
+}
+
+// Letzten gültigen monthlySold-Wert aus der Historie ziehen (-1 = kein Badge).
+export function latestMonthlySold(p: KeepaProduct): number | null {
+  if (typeof p.monthlySold === "number" && p.monthlySold > 0) return p.monthlySold;
+  const h = p.monthlySoldHistory || [];
+  for (let j = h.length - 1; j >= 1; j -= 2) {
+    if (h[j] > 0) return h[j];
+  }
+  return null;
 }
 
 // Partner-/eigene Apotheken – Seller-Namen die als „Partner" (grün) gelten.

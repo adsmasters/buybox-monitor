@@ -7,7 +7,12 @@ import DistChart from "./DistChart";
 interface BBRow   { asin: string; ts: string; ts_km: number; seller_id: string; seller_name: string }
 interface PrRow   { asin: string; ts: string; ts_km: number; price_eur: number | null }
 interface Seller  { seller_id: string; seller_name: string; is_partner: boolean }
-interface Product { asin: string; title: string | null; brand: string | null }
+interface Product {
+  asin: string; title: string | null; brand: string | null;
+  monthly_sold?: number | null;
+  sales_rank_drops_30?: number | null;
+  sales_rank_drops_90?: number | null;
+}
 
 interface Props {
   bbHistory: BBRow[];
@@ -277,7 +282,7 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {["Produkt", "Aktueller Buy-Box-Seller", "Akt. Preis", "Ø 30-Tage", "Letzte 30 Tage"].map(h => (
+                  {["Produkt", "Aktueller Buy-Box-Seller", "Akt. Preis", "Ø 30-Tage", "Verkäufe/Monat", "Rank-Drops 90T", "Letzte 30 Tage"].map(h => (
                     <th key={h} className="text-left px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -306,6 +311,16 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
                       </td>
                       <td className="px-5 py-3 font-semibold text-gray-900">{fmtEur(r.lastPr)}</td>
                       <td className="px-5 py-3 text-gray-600">{fmtEur(r.avg30)}</td>
+                      <td className="px-5 py-3 text-gray-900">
+                        {r.monthly_sold != null
+                          ? <span className="font-medium">{r.monthly_sold}+</span>
+                          : <span className="text-gray-400">n/a</span>}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600">
+                        {r.sales_rank_drops_90 != null && r.sales_rank_drops_90 >= 0
+                          ? r.sales_rank_drops_90
+                          : <span className="text-gray-400">n/a</span>}
+                      </td>
                       <td className="px-5 py-3">
                         {sparkRows.length === 0 ? <span className="text-gray-300 text-xs">n/a</span> : (
                           <div className="flex h-3.5 rounded overflow-hidden gap-px w-28">
