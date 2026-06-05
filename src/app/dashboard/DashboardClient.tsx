@@ -42,6 +42,18 @@ function fmtDate(ts: string): string {
 function fmtTime(ts: string): string {
   return new Date(ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) + " Uhr";
 }
+function fmtEur0(v: number): string {
+  return Math.round(v).toLocaleString("de-DE") + " €";
+}
+// Nächste Amazon-Badge-Stufe über v (50+→100, 200+→300, 1000+→2000 …).
+// Die Obergrenze der aktuellen Stufe ist nextTier-1 verkaufte Einheiten.
+function nextTier(v: number): number {
+  const tiers = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900,
+                 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000,
+                 10000, 20000, 50000, 100000];
+  for (const t of tiers) if (t > v) return t;
+  return v * 2;
+}
 
 // ── Hauptkomponente ─────────────────────────────────────────────────────────
 export default function DashboardClient({ bbHistory, priceHistory, sellers, products }: Props) {
@@ -52,6 +64,7 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
   const [drilldownAsin, setDrilldownAsin] = useState<string | null>(null);
   const [distDaysLeft, setDistDaysLeft] = useState(90);
   const [distDaysRight, setDistDaysRight] = useState(30);
+  const [dropDays, setDropDays] = useState(30);
 
   const sellerMap = useMemo(() => {
     const m: Record<string, Seller> = {};
@@ -136,18 +149,41 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
   // KPIs
   const kpi = useMemo(() => {
     const products = Object.values(productMap);
-    // Mindestumsatz/Monat gesamt = Σ (monthly_sold × aktueller Preis)
-    let revenue = 0;
+    // Umsatz/Monat gesamt = Σ (Einheiten × aktueller Preis), als Spanne:
+    // Min = Badge-Wert (z. B. 50), Max = nächste Stufe − 1 (z. B. 99)
+    let revenueMin = 0, revenueMax = 0;
     for (const p of products) {
       const prs = priceByAsin[p.asin] || [];
       const lastPr = prs.length ? prs[prs.length - 1].price_eur : null;
-      if (p.monthly_sold != null && lastPr != null) revenue += p.monthly_sold * lastPr;
+      if (p.monthly_sold != null && lastPr != null) {
+        revenueMin += p.monthly_sold * lastPr;
+        revenueMax += (nextTier(p.monthly_sold) - 1) * lastPr;
+      }
     }
     // Wechsel letzte 7 Tage
     const cut7 = Date.now() - 7 * 86400_000;
     const changes7 = changes.filter(c => new Date(c.ts).getTime() >= cut7).length;
-    return { total: products.length, revenue, changes7 };
+    return { total: products.length, revenueMin, revenueMax, changes7 };
   }, [productMap, priceByAsin, changes]);
+
+  // Preis-Senker: Seller, die im Zeitraum die Buy Box zu einem NIEDRIGEREN
+  // Preis übernommen haben („wer drückt die Preise?"). Pro Übernahme mit
+  // price_after < price_before zählt ein Drop für den neuen Seller.
+  const priceDroppers = useMemo(() => {
+    const cut = Date.now() - dropDays * 86400_000;
+    const m: Record<string, { name: string; drops: number; totalDrop: number }> = {};
+    for (const c of changes) {
+      if (new Date(c.ts).getTime() < cut) continue;
+      if (c.price_before == null || c.price_after == null) continue;
+      if (c.price_after >= c.price_before) continue;
+      const id = c.to_id;
+      if (!id || id === "-1" || id === "-2") continue;
+      if (!m[id]) m[id] = { name: c.to_name || id, drops: 0, totalDrop: 0 };
+      m[id].drops++;
+      m[id].totalDrop += c.price_before - c.price_after;
+    }
+    return Object.entries(m).sort((a, b) => b[1].drops - a[1].drops);
+  }, [changes, dropDays]);
 
   // Tabellen-Daten
   const tableRows = useMemo(() => {
@@ -193,7 +229,7 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
           { label: "ASINs überwacht", value: String(kpi.total), sub: "" },
-          { label: "Mindestumsatz/Monat gesamt", value: fmtEur(kpi.revenue) + "+", sub: "Σ Verkäufe × Preis, alle ASINs" },
+          { label: "Umsatz/Monat gesamt (geschätzt)", value: `${fmtEur0(kpi.revenueMin)} – ${fmtEur0(kpi.revenueMax)}`, sub: "Spanne aus Verkaufsstufen × Preis" },
           { label: "Buy-Box-Wechsel (7 Tage)", value: String(kpi.changes7), sub: "letzte 7 Tage" },
         ].map(k => (
           <div key={k.label} className="bg-white rounded-xl border border-gray-200 px-6 py-5">
@@ -211,6 +247,55 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <DistChart bbHistory={bbHistory} sellers={sellers} sellerColor={sellerColor} days={distDaysLeft} setDays={setDistDaysLeft} />
           <DistChart bbHistory={bbHistory} sellers={sellers} sellerColor={sellerColor} days={distDaysRight} setDays={setDistDaysRight} />
+        </div>
+      </section>
+
+      {/* ── Preis-Senker ── */}
+      <section>
+        <div className="flex items-center gap-3 mb-1">
+          <h2 className="text-lg font-bold text-gray-900">Wer drückt die Preise?</h2>
+          <div className="flex gap-1">
+            {([7, 30, 90] as const).map(d => (
+              <button key={d} onClick={() => setDropDays(d)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${dropDays === d ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}>
+                {d} Tage
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="text-sm text-gray-500 mb-3">Seller, die die Buy Box am häufigsten zu einem niedrigeren Preis übernommen haben</p>
+        <div className="bg-white rounded-xl border border-gray-200">
+          {priceDroppers.length === 0 ? (
+            <p className="text-center text-sm text-gray-400 py-8">Keine Preissenkungen im Zeitraum.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold">#</th>
+                  <th className="text-left px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold">Seller</th>
+                  <th className="text-right px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold">Preissenkungen</th>
+                  <th className="text-right px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold">Σ Senkung</th>
+                  <th className="text-right px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold">Ø je Senkung</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {priceDroppers.slice(0, 10).map(([id, v], i) => {
+                  const type = sellerType(id);
+                  return (
+                    <tr key={id} className="hover:bg-gray-50">
+                      <td className="px-5 py-3 text-gray-400 font-semibold">{i + 1}</td>
+                      <td className="px-5 py-3">
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${pillCls(type)}`}>{v.name}</span>
+                      </td>
+                      <td className="px-5 py-3 text-right font-bold text-gray-900">{v.drops}×</td>
+                      <td className="px-5 py-3 text-right text-red-600 font-medium">−{fmtEur(v.totalDrop)}</td>
+                      <td className="px-5 py-3 text-right text-gray-600">−{fmtEur(v.totalDrop / v.drops)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </section>
 
@@ -297,7 +382,7 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {["Produkt", "Aktueller Buy-Box-Seller", "Akt. Preis", "Ø 30-Tage", "Verkäufe/Monat", "Mindestumsatz/Monat", "Rank-Drops 90T", "Letzte 30 Tage"].map(h => (
+                  {["Produkt", "Aktueller Buy-Box-Seller", "Akt. Preis", "Ø 30-Tage", "Verkäufe/Monat", "Umsatz/Monat (Spanne)", "Rank-Drops 90T", "Letzte 30 Tage"].map(h => (
                     <th key={h} className="text-left px-5 py-3 text-xs uppercase tracking-wide text-gray-400 font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -331,9 +416,11 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
                           ? <span className="font-medium">{r.monthly_sold}+</span>
                           : <span className="text-gray-400">n/a</span>}
                       </td>
-                      <td className="px-5 py-3 font-semibold text-gray-900">
+                      <td className="px-5 py-3 font-semibold text-gray-900 whitespace-nowrap">
                         {r.monthly_sold != null && r.lastPr != null
-                          ? <span title={`${r.monthly_sold}+ × ${fmtEur(r.lastPr)}`}>{fmtEur(r.monthly_sold * r.lastPr)}+</span>
+                          ? <span title={`${r.monthly_sold}–${nextTier(r.monthly_sold) - 1} Einheiten × ${fmtEur(r.lastPr)}`}>
+                              {fmtEur0(r.monthly_sold * r.lastPr)} – {fmtEur0((nextTier(r.monthly_sold) - 1) * r.lastPr)}
+                            </span>
                           : <span className="text-gray-400">n/a</span>}
                       </td>
                       <td className="px-5 py-3 text-gray-600">
