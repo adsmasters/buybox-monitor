@@ -50,6 +50,8 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
   const [feedSearch, setFeedSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
   const [drilldownAsin, setDrilldownAsin] = useState<string | null>(null);
+  const [distDaysLeft, setDistDaysLeft] = useState(90);
+  const [distDaysRight, setDistDaysRight] = useState(30);
 
   const sellerMap = useMemo(() => {
     const m: Record<string, Seller> = {};
@@ -133,15 +135,19 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
 
   // KPIs
   const kpi = useMemo(() => {
-    const asins = Object.keys(productMap);
-    let partner = 0, external = 0;
-    asins.forEach(a => {
-      const t = sellerType(currentBB[a]?.seller_id ?? null);
-      if (t === "partner") partner++;
-      else if (t === "external") external++;
-    });
-    return { total: asins.length, partner, external, changes: changes.length };
-  }, [productMap, currentBB]);
+    const products = Object.values(productMap);
+    // Mindestumsatz/Monat gesamt = Σ (monthly_sold × aktueller Preis)
+    let revenue = 0;
+    for (const p of products) {
+      const prs = priceByAsin[p.asin] || [];
+      const lastPr = prs.length ? prs[prs.length - 1].price_eur : null;
+      if (p.monthly_sold != null && lastPr != null) revenue += p.monthly_sold * lastPr;
+    }
+    // Wechsel letzte 7 Tage
+    const cut7 = Date.now() - 7 * 86400_000;
+    const changes7 = changes.filter(c => new Date(c.ts).getTime() >= cut7).length;
+    return { total: products.length, revenue, changes7 };
+  }, [productMap, priceByAsin, changes]);
 
   // Tabellen-Daten
   const tableRows = useMemo(() => {
@@ -184,16 +190,15 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
     <main className="max-w-7xl mx-auto px-6 py-7 space-y-8">
 
       {/* ── KPI-Leiste ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { label: "ASINs überwacht", value: kpi.total, sub: "" },
-          { label: "Buy-Box-Wechsel (1 Jahr)", value: kpi.changes, sub: "" },
-          { label: "Aktuell Partner-BB", value: kpi.partner, sub: kpi.total ? `${Math.round(kpi.partner / kpi.total * 100)} %` : "", color: "text-emerald-600" },
-          { label: "Aktuell Fremd-BB", value: kpi.external, sub: kpi.total ? `${Math.round(kpi.external / kpi.total * 100)} %` : "", color: "text-red-600" },
+          { label: "ASINs überwacht", value: String(kpi.total), sub: "" },
+          { label: "Mindestumsatz/Monat gesamt", value: fmtEur(kpi.revenue) + "+", sub: "Σ Verkäufe × Preis, alle ASINs" },
+          { label: "Buy-Box-Wechsel (7 Tage)", value: String(kpi.changes7), sub: "letzte 7 Tage" },
         ].map(k => (
           <div key={k.label} className="bg-white rounded-xl border border-gray-200 px-6 py-5">
             <div className="text-xs uppercase tracking-wide text-gray-400 mb-1">{k.label}</div>
-            <div className={`text-3xl font-bold ${k.color || "text-gray-900"}`}>{k.value}</div>
+            <div className="text-3xl font-bold text-gray-900">{k.value}</div>
             {k.sub && <div className="text-xs text-gray-400 mt-0.5">{k.sub}</div>}
           </div>
         ))}
@@ -202,9 +207,10 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
       {/* ── Verteilung (Überblick, ganz oben: grob → detailliert) ── */}
       <section>
         <h2 className="text-lg font-bold text-gray-900 mb-1">Buy-Box-Verteilung gesamt</h2>
-        <p className="text-sm text-gray-500 mb-3">Anteil je Seller über alle ASINs, letzte 90 Tage</p>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <DistChart bbHistory={bbHistory} sellers={sellers} sellerColor={sellerColor} />
+        <p className="text-sm text-gray-500 mb-3">Zeitgewichteter Anteil je Seller über alle ASINs – zwei Zeiträume zum Vergleich</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <DistChart bbHistory={bbHistory} sellers={sellers} sellerColor={sellerColor} days={distDaysLeft} setDays={setDistDaysLeft} />
+          <DistChart bbHistory={bbHistory} sellers={sellers} sellerColor={sellerColor} days={distDaysRight} setDays={setDistDaysRight} />
         </div>
       </section>
 

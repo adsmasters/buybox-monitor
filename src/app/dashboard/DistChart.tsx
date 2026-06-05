@@ -5,6 +5,8 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
+const KEEPA_EPOCH_MS = new Date("2011-01-01T00:00:00Z").getTime();
+
 interface BBRow  { asin: string; ts_km: number; seller_id: string; seller_name: string }
 interface Seller { seller_id: string; seller_name: string; is_partner: boolean }
 
@@ -12,33 +14,50 @@ interface Props {
   bbHistory: BBRow[];
   sellers: Seller[];
   sellerColor: (id: string | null) => string;
+  days: number;
+  setDays: (d: number) => void;
 }
 
-export default function DistChart({ bbHistory, sellers, sellerColor }: Props) {
+export default function DistChart({ bbHistory, sellers, sellerColor, days, setDays }: Props) {
   const sellerMap = useMemo(() => {
     const m: Record<string, Seller> = {};
     sellers.forEach(s => { m[s.seller_id] = s; });
     return m;
   }, [sellers]);
 
-  const counts = useMemo(() => {
-    const m: Record<string, { name: string; count: number; is_partner: boolean }> = {};
-    bbHistory.forEach(r => {
-      if (!r.seller_id || r.seller_id === "-1") return;
-      const name = r.seller_name || r.seller_id;
-      if (!m[r.seller_id]) m[r.seller_id] = { name, count: 0, is_partner: sellerMap[r.seller_id]?.is_partner ?? false };
-      m[r.seller_id].count++;
-    });
-    return Object.entries(m).sort((a, b) => b[1].count - a[1].count);
-  }, [bbHistory, sellerMap]);
+  // Zeitgewichteter Anteil: wie LANGE hielt jeder Seller die Buy Box im Fenster.
+  const shares = useMemo(() => {
+    const nowKm = Math.floor((Date.now() - KEEPA_EPOCH_MS) / 60000);
+    const cut = nowKm - days * 1440;
 
-  const total = counts.reduce((s, [, v]) => s + v.count, 0);
+    // nach ASIN gruppieren (bbHistory ist global aufsteigend nach ts_km)
+    const byAsin: Record<string, BBRow[]> = {};
+    bbHistory.forEach(r => { (byAsin[r.asin] ??= []).push(r); });
+
+    const dur: Record<string, { name: string; minutes: number; is_partner: boolean }> = {};
+    for (const rows of Object.values(byAsin)) {
+      for (let i = 0; i < rows.length; i++) {
+        const id = rows[i].seller_id;
+        if (!id || id === "-1") continue;
+        const segStart = Math.max(rows[i].ts_km, cut);
+        const segEnd   = i + 1 < rows.length ? rows[i + 1].ts_km : nowKm;
+        const minutes  = segEnd - segStart;
+        if (minutes <= 0) continue;
+        const name = rows[i].seller_name || id;
+        if (!dur[id]) dur[id] = { name, minutes: 0, is_partner: sellerMap[id]?.is_partner ?? false };
+        dur[id].minutes += minutes;
+      }
+    }
+    return Object.entries(dur).sort((a, b) => b[1].minutes - a[1].minutes);
+  }, [bbHistory, sellerMap, days]);
+
+  const total = shares.reduce((s, [, v]) => s + v.minutes, 0);
 
   const chartData = {
-    labels: counts.map(([, v]) => v.name),
+    labels: shares.map(([, v]) => v.name),
     datasets: [{
-      data: counts.map(([, v]) => v.count),
-      backgroundColor: counts.map(([id]) => sellerColor(id)),
+      data: shares.map(([, v]) => v.minutes),
+      backgroundColor: shares.map(([id]) => sellerColor(id)),
       borderWidth: 2,
       borderColor: "#fff",
     }],
@@ -51,44 +70,48 @@ export default function DistChart({ bbHistory, sellers, sellerColor }: Props) {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (ctx: any) => ` ${ctx.label}: ${(ctx.raw / total * 100).toFixed(1)} %`,
+          label: (ctx: any) => ` ${ctx.label}: ${total ? (ctx.raw / total * 100).toFixed(1) : 0} %`,
         },
       },
     },
   };
 
-  if (counts.length === 0) return <p className="text-sm text-gray-400">Keine Daten.</p>;
-
   return (
-    <div className="flex flex-col md:flex-row gap-8 items-start">
-      <div className="w-64 h-64 flex-shrink-0">
-        <Doughnut data={chartData} options={chartOpts} />
+    <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="flex gap-1 mb-4">
+        {([30, 90, 365] as const).map(d => (
+          <button key={d} onClick={() => setDays(d)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${days === d ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-600 hover:border-gray-400"}`}>
+            {d === 365 ? "1 Jahr" : `${d} Tage`}
+          </button>
+        ))}
       </div>
-      <table className="flex-1 text-sm">
-        <thead>
-          <tr className="border-b border-gray-100">
-            <th className="text-left pb-2 text-xs uppercase tracking-wide text-gray-400 font-semibold">Seller</th>
-            <th className="text-left pb-2 text-xs uppercase tracking-wide text-gray-400 font-semibold">Anteil</th>
-            <th className="text-left pb-2 text-xs uppercase tracking-wide text-gray-400 font-semibold w-32">Verteilung</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {counts.slice(0, 15).map(([id, v]) => {
-            const pct = total ? v.count / total * 100 : 0;
-            return (
-              <tr key={id}>
-                <td className="py-2 font-medium text-gray-900">{v.name}</td>
-                <td className="py-2 font-semibold text-gray-900">{pct.toFixed(1)} %</td>
-                <td className="py-2">
-                  <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: sellerColor(id) }} />
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+
+      {shares.length === 0 ? (
+        <p className="text-sm text-gray-400 py-8 text-center">Keine Daten im Zeitraum.</p>
+      ) : (
+        <div className="flex flex-col items-center">
+          <div className="w-48 h-48 mb-4">
+            <Doughnut data={chartData} options={chartOpts} />
+          </div>
+          <table className="w-full text-sm">
+            <tbody className="divide-y divide-gray-100">
+              {shares.slice(0, 8).map(([id, v]) => {
+                const pct = total ? v.minutes / total * 100 : 0;
+                return (
+                  <tr key={id}>
+                    <td className="py-1.5">
+                      <span className="inline-block w-2.5 h-2.5 rounded-sm mr-2 align-middle" style={{ background: sellerColor(id) }} />
+                      <span className="font-medium text-gray-900">{v.name}</span>
+                    </td>
+                    <td className="py-1.5 text-right font-semibold text-gray-900 w-16">{pct.toFixed(1)} %</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
