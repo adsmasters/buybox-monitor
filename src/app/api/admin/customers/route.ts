@@ -13,13 +13,13 @@ export async function POST(req: Request) {
   if (!await checkAdmin()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { name, email } = await req.json();
-  if (!name || !email) return NextResponse.json({ error: "name und email erforderlich" }, { status: 400 });
+  if (!name || !name.trim()) return NextResponse.json({ error: "Name erforderlich" }, { status: 400 });
 
-  const e = email.trim().toLowerCase();
+  const e = email && email.trim() ? email.trim().toLowerCase() : null;
   const admin = createServiceClient();
   const { data, error } = await admin
     .from("customers")
-    .insert({ name, email: e, emails: [e] })
+    .insert({ name: name.trim(), email: e, emails: e ? [e] : [] })
     .select()
     .single();
 

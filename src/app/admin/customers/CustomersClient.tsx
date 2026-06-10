@@ -52,7 +52,7 @@ export default function CustomersClient({ customers: init, asins: initAsins }: P
   }
 
   async function addCustomer() {
-    if (!newName || !newEmail) return;
+    if (!newName.trim()) { setMsg("Bitte einen Namen eingeben."); return; }
     const res = await fetch("/api/admin/customers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -104,12 +104,13 @@ export default function CustomersClient({ customers: init, asins: initAsins }: P
           <div className="px-5 py-4 border-b border-gray-100 space-y-2">
             <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Name"
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400" />
-            <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="E-Mail" type="email"
+            <input value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="E-Mail (optional)" type="email"
               className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400" />
             <button onClick={addCustomer}
               className="bg-blue-600 text-white text-sm font-medium px-4 py-1.5 rounded-lg hover:bg-blue-700 transition-colors">
               Kunden anlegen
             </button>
+            <p className="text-xs text-gray-400">E-Mail nur nötig, wenn der Kunde später selbst Zugriff bekommen soll. Zugänge lassen sich jederzeit nachträglich ergänzen.</p>
           </div>
 
           <div className="divide-y divide-gray-100">
@@ -118,7 +119,7 @@ export default function CustomersClient({ customers: init, asins: initAsins }: P
               <button key={c.id} onClick={() => setSelected(c)}
                 className={`w-full text-left px-5 py-3 transition-colors hover:bg-gray-50 ${selected?.id === c.id ? "bg-blue-50" : ""}`}>
                 <div className="font-medium text-sm text-gray-900">{c.name}</div>
-                <div className="text-xs text-gray-400">{c.email} · {asins.filter(a => a.customer_id === c.id).length} ASINs</div>
+                <div className="text-xs text-gray-400">{(c.emails && c.emails.length) ? c.emails.join(", ") : "kein Zugang"} · {asins.filter(a => a.customer_id === c.id).length} ASINs</div>
               </button>
             ))}
           </div>
