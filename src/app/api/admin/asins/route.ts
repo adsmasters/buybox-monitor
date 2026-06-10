@@ -15,8 +15,16 @@ export async function POST(req: Request) {
   const { customer_id, asins } = await req.json();
   if (!customer_id || !asins?.length) return NextResponse.json({ error: "customer_id und asins erforderlich" }, { status: 400 });
 
+  // ASINs normalisieren + duplikate entfernen (sonst: "ON CONFLICT cannot affect row a second time")
+  const unique = [...new Set(
+    (asins as string[])
+      .map((a) => (a || "").trim().toUpperCase())
+      .filter(Boolean)
+  )];
+  if (!unique.length) return NextResponse.json({ error: "Keine gültigen ASINs" }, { status: 400 });
+
   const admin = createServiceClient();
-  const rows = asins.map((asin: string) => ({ customer_id, asin }));
+  const rows = unique.map((asin: string) => ({ customer_id, asin }));
   const { data, error } = await admin
     .from("asins")
     .upsert(rows, { onConflict: "customer_id,asin" })
