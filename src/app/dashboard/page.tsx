@@ -34,20 +34,22 @@ export default async function DashboardPage({
     customers = data || [];
   }
 
-  // Welcher Kunde wird angezeigt?
-  // - Admin: ?customer=<id> oder "all" (alle); Default = alle
+  // Welcher Kunde wird angezeigt? Immer genau EINER (kein "Alle").
+  // - Admin: ?customer=<id>, sonst der erste Kunde
   // - Kunde: immer der eigene
-  const selectedCustomerId = isAdmin ? (sp.customer || "all") : (ownCustomer?.id ?? null);
-
-  // ASINs für die Auswahl bestimmen
-  let asinQuery = supabase.from("asins").select("asin");
-  if (selectedCustomerId && selectedCustomerId !== "all") {
-    asinQuery = asinQuery.eq("customer_id", selectedCustomerId);
-  } else if (!isAdmin) {
-    // Nicht-Admin ohne Kunde → nichts
-    asinQuery = asinQuery.eq("customer_id", "00000000-0000-0000-0000-000000000000");
+  let selectedCustomerId: string | null;
+  if (isAdmin) {
+    const valid = sp.customer && customers.some((c) => c.id === sp.customer) ? sp.customer! : null;
+    selectedCustomerId = valid || (customers[0]?.id ?? null);
+  } else {
+    selectedCustomerId = ownCustomer?.id ?? null;
   }
-  const { data: asinRows } = await asinQuery;
+
+  // ASINs für die Auswahl bestimmen (immer auf einen Kunden begrenzt)
+  const { data: asinRows } = await supabase
+    .from("asins")
+    .select("asin")
+    .eq("customer_id", selectedCustomerId || "00000000-0000-0000-0000-000000000000");
   const asins: string[] = (asinRows || []).map((r: any) => r.asin);
 
   if (asins.length === 0) {

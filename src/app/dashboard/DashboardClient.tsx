@@ -261,11 +261,10 @@ export default function DashboardClient({ bbHistory, priceHistory, sellers, prod
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">Kunde:</span>
           <select
-            value={selectedCustomerId || "all"}
+            value={selectedCustomerId || ""}
             onChange={e => router.push(`/dashboard?customer=${e.target.value}`)}
             className="text-sm font-semibold border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:border-blue-400 cursor-pointer bg-white"
           >
-            <option value="all">Alle Kunden ({customers.length})</option>
             {customers.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
