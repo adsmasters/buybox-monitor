@@ -27,7 +27,7 @@ export default function LoginPage() {
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-8 w-full max-w-sm">
         <div className="mb-6">
           <h1 className="text-xl font-bold text-gray-900">Buy-Box Monitor</h1>
-          <p className="text-sm text-gray-500 mt-1">Buy-Box Überwachung · Amazon.de</p>
+          <p className="text-sm text-gray-500 mt-1">Amazon.de</p>
         </div>
 
         {sent ? (
